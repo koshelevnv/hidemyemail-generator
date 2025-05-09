@@ -8,7 +8,7 @@ _You do need to have an active iCloud+ subscription to be able to generate iClou
 
 ## Usage
 
-You can get prebuild binaries for Windows & ARM Macs from the [releases page](https://github.com/rtunazzz/hidemyemail-generator/releases). Follow the guide steps 1 & 2 below if you'd like to run it from source, otherwise you can skip to the 3rd step - set your cookie and run.
+You can get prebuild binaries for Windows & ARM Macs from the [releases page](https://github.com/koshelevnv/hidemyemail-generator/releases). Follow the guide steps 1 & 2 below if you'd like to run it from source, otherwise you can skip to the 3rd step - set your cookie and run.
 
 Apple allows you to create 5 * # of people in your iCloud familly emails every 30 mins or so. From my experience, they cap the amount of iCloud emails you can generate at ~700.
 
@@ -18,7 +18,7 @@ Apple allows you to create 5 * # of people in your iCloud familly emails every 3
 1. Clone this repository
 
 ```bash
-git clone https://github.com/rtunazzz/hidemyemail-generator
+git clone https://github.com/koshelevnv/hidemyemail-generator
 ```
 
 2. Install requirements
@@ -27,7 +27,7 @@ git clone https://github.com/rtunazzz/hidemyemail-generator
 pip install -r requirements.txt
 ```
 
-3. [Save your cookie string](https://github.com/rtunazzz/hidemyemail-generator#getting-icloud-cookie-string)
+3. [Save your cookie string](https://github.com/koshelevnv/hidemyemail-generator#getting-icloud-cookie-string)
 
    > You only need to do this once 🙂
 
@@ -50,9 +50,9 @@ python main.py
 
 > There is more than one way how you can get the required cookie string but this one is _imo_ the simplest...
 
-1. Download [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/fngmhnnpilhplaeedifhccceomclgfbg) Chrome extension
+1. Download [EditThisCookie (V3)](https://chromewebstore.google.com/detail/editthiscookie-v3/ojfebgpkimhlhcblbalbfjblapadhbol) Chrome extension
 
-2. Go to [EditThisCookie settings page](chrome-extension://fngmhnnpilhplaeedifhccceomclgfbg/options_pages/user_preferences.html) and set the preferred export format to `Semicolon separated name=value pairs`
+2. Go to [EditThisCookie (V3) settings page](chrome-extension://ojfebgpkimhlhcblbalbfjblapadhbol/options_pages/support.html) and set the preferred export format to `Semicolon separated name=value pairs`
 
 <p align="center"><img src="docs/cookie-settings.png" width=70%></p>
 
