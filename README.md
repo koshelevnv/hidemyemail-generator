@@ -67,5 +67,3 @@ python main.py
 # License
 
 Licensed under the MIT License - see the [LICENSE file](./LICENSE) for more details.
-
-Made by **[rtuna](https://twitter.com/rtunazzz)**.
