@@ -1,18 +1,14 @@
 import asyncio
-import datetime
 import os
-from typing import Union, List, Optional
+import datetime
 import re
-
+from typing import Optional, List
+from rich.console import Console
 from rich.text import Text
 from rich.prompt import IntPrompt
-from rich.console import Console
 from rich.table import Table
 
 from icloud import HideMyEmail
-
-
-MAX_CONCURRENT_TASKS = 10
 
 
 class RichHideMyEmail(HideMyEmail):
@@ -22,167 +18,91 @@ class RichHideMyEmail(HideMyEmail):
         super().__init__()
         self.console = Console()
         self.table = Table()
-
         if os.path.exists(self._cookie_file):
-            # load in a cookie string from file
             with open(self._cookie_file, "r") as f:
                 self.cookies = [line for line in f if not line.startswith("//")][0]
         else:
-            self.console.log(
-                '[bold yellow][WARN][/] No "cookie.txt" file found! Generation might not work due to unauthorized access.'
-            )
+            self.console.log('[bold yellow][WARN][/] No "cookie.txt" file found!')
 
-    async def _generate_one(self) -> Union[str, None]:
-        # First, generate an email
+    async def _generate_one(self) -> Optional[str]:
         gen_res = await self.generate_email()
-
-        if not gen_res:
-            return
-        elif "success" not in gen_res or not gen_res["success"]:
-            error = gen_res["error"] if "error" in gen_res else {}
-            err_msg = "Unknown"
-            if type(error) == int and "reason" in gen_res:
-                err_msg = gen_res["reason"]
-            elif type(error) == dict and "errorMessage" in error:
-                err_msg = error["errorMessage"]
-            self.console.log(
-                f"[bold red][ERR][/] - Failed to generate email. Reason: {err_msg}"
-            )
-            return
+        if not gen_res or not gen_res.get("success"):
+            reason = gen_res.get("reason") or gen_res.get("error", {}).get("errorMessage", "Unknown")
+            self.console.log(f"[bold red][ERR][/] Failed to generate email: {reason}")
+            return None
 
         email = gen_res["result"]["hme"]
-        self.console.log(f'[50%] "{email}" - Successfully generated')
+        self.console.log(f'[50%] "{email}" - Generated')
 
-        # Then, reserve it
         reserve_res = await self.reserve_email(email)
+        if not reserve_res or not reserve_res.get("success"):
+            reason = reserve_res.get("reason") or reserve_res.get("error", {}).get("errorMessage", "Unknown")
 
-        if not reserve_res:
-            return
-        elif "success" not in reserve_res or not reserve_res["success"]:
-            error = reserve_res["error"] if "error" in reserve_res else {}
-            err_msg = "Unknown"
-            if type(error) == int and "reason" in reserve_res:
-                err_msg = reserve_res["reason"]
-            elif type(error) == dict and "errorMessage" in error:
-                err_msg = error["errorMessage"]
-            self.console.log(
-                f'[bold red][ERR][/] "{email}" - Failed to reserve email. Reason: {err_msg}'
-            )
-            return
+            # Check for Apple rate limit message
+            if isinstance(reason, str) and "you have reached the limit" in reason.lower():
+                self.console.log(
+                    f'[bold yellow][!] Rate limit reached. Waiting 60 minutes...'
+                )
+                await asyncio.sleep(3600)
+                return None
 
-        self.console.log(f'[100%] "{email}" - Successfully reserved')
+            self.console.log(f'[bold red][ERR][/] "{email}" - Failed to reserve: {reason}')
+            return None
+
+        self.console.log(f'[100%] "{email}" - Reserved')
         return email
 
-    async def _generate(self, num: int):
-        tasks = []
-        for _ in range(num):
-            task = asyncio.ensure_future(self._generate_one())
-            tasks.append(task)
+    async def generate(self, total_count: int):
+        self.console.rule()
+        self.console.log(f"🔧 Starting generation of {total_count} email(s)...")
+        self.console.rule()
 
-        return filter(lambda e: e is not None, await asyncio.gather(*tasks))
+        all_emails = set()
+        generated = 0
 
-    async def generate(self, count: Optional[int]) -> List[str]:
-        try:
-            emails = []
-            self.console.rule()
-            if count is None:
-                s = IntPrompt.ask(
-                    Text.assemble(("How many iCloud emails you want to generate?")),
-                    console=self.console,
-                )
+        while generated < total_count:
+            batch_count = 0
 
-                count = int(s)
-            self.console.log(f"Generating {count} email(s)...")
-            self.console.rule()
+            while batch_count < 5 and generated < total_count:
+                email = await self._generate_one()
+                if not email:
+                    continue
+                if email in all_emails:
+                    self.console.log(f"[yellow][!] Duplicate detected: {email}, skipping...")
+                    continue
 
-            with self.console.status(f"[bold green]Generating iCloud email(s)..."):
-                while count > 0:
-                    batch = await self._generate(
-                        count if count < MAX_CONCURRENT_TASKS else MAX_CONCURRENT_TASKS
-                    )
-                    count -= MAX_CONCURRENT_TASKS
-                    emails += batch
+                all_emails.add(email)
+                generated += 1
+                batch_count += 1
 
-            if len(emails) > 0:
                 with open("emails.txt", "a+") as f:
-                    f.write(os.linesep.join(emails) + os.linesep)
+                    f.write(email.strip() + "\n")
 
-                self.console.rule()
-                self.console.log(
-                    f':star: Emails have been saved into the "emails.txt" file'
-                )
+                self.console.log(f"[green]Saved {generated}/{total_count}")
+                await asyncio.sleep(10)
 
-                self.console.log(
-                    f"[bold green]All done![/] Successfully generated [bold green]{len(emails)}[/] email(s)"
-                )
+            if generated < total_count:
+                self.console.log(f"[cyan]⏸️  Batch complete. Waiting 1 hour before continuing...")
+                await asyncio.sleep(3600)
 
-            return emails
-        except KeyboardInterrupt:
-            return []
-
-    async def list(self, active: bool, search: str) -> None:
-        gen_res = await self.list_email()
-        if not gen_res:
-            return
-
-        if "success" not in gen_res or not gen_res["success"]:
-            error = gen_res["error"] if "error" in gen_res else {}
-            err_msg = "Unknown"
-            if type(error) == int and "reason" in gen_res:
-                err_msg = gen_res["reason"]
-            elif type(error) == dict and "errorMessage" in error:
-                err_msg = error["errorMessage"]
-            self.console.log(
-                f"[bold red][ERR][/] - Failed to generate email. Reason: {err_msg}"
-            )
-            return
-
-        self.table.add_column("Label")
-        self.table.add_column("Hide my email")
-        self.table.add_column("Created Date Time")
-        self.table.add_column("IsActive")
-
-        for row in gen_res["result"]["hmeEmails"]:
-            if row["isActive"] == active:
-                if search is not None and re.search(search, row["label"]):
-                    self.table.add_row(
-                        row["label"],
-                        row["hme"],
-                        str(
-                            datetime.datetime.fromtimestamp(
-                                row["createTimestamp"] / 1000
-                            )
-                        ),
-                        str(row["isActive"]),
-                    )
-                else:
-                    self.table.add_row(
-                        row["label"],
-                        row["hme"],
-                        str(
-                            datetime.datetime.fromtimestamp(
-                                row["createTimestamp"] / 1000
-                            )
-                        ),
-                        str(row["isActive"]),
-                    )
-
-        self.console.print(self.table)
+        self.console.rule()
+        self.console.log(f"[bold green]✅ Done! Generated {generated} unique email(s).")
 
 
-async def generate(count: Optional[int]) -> None:
+async def main():
+    console = Console()
+    s = IntPrompt.ask(
+        Text.assemble(("Сколько адресов iCloud нужно сгенерировать?")),
+        console=console,
+    )
+    count = int(s)
+
     async with RichHideMyEmail() as hme:
         await hme.generate(count)
 
 
-async def list(active: bool, search: str) -> None:
-    async with RichHideMyEmail() as hme:
-        await hme.list(active, search)
-
-
 if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
     try:
-        loop.run_until_complete(generate(None))
+        asyncio.run(main())
     except KeyboardInterrupt:
-        pass
+        print("\n[!] Остановка пользователем.")
